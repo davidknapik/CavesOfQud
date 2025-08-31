@@ -1,0 +1,165 @@
+ 	
+Caves of Qud
+
+Cheat Codes:
+------------
+Submitted by: David K.
+
+The command panel can be accessed in the game by pressing [Ctrl] and W.
+ 
+Code               Result
+---------------------------------
+blink           - Teleport.
+day             - Set the time to day.
+glotrot         - Give yourself glotrot.
+glotrotonset    - Give yourself glotrot onset.
+idkfa           - God Mode.
+ironshank       - Give yourself ironshank.
+ironshankonset  - Give yourself ironshank onset.
+maxmod          - Set the mod chance to 999.
+minime          - Create an evil twin.
+night           - Set the time to night.
+pro             - Gain high stats.
+relic           - Generate all relics in the history + one random relic for each type.
+smartass        - Add all tinkering skills.
+sultanreveal    - Reveal all sultan locations.
+trip            - Go prone.
+whatami         - Displays the player body’s blueprint.
+xp:[amount]     - Grant an amount of xp.
+
+
+
+https://freehold.atlassian.net/wiki/spaces/CQP/pages/46235649/Wishes#suk=
+
+<unmatched>              any wish not specifically in the list below will perform a lexigraphic search on objects blueprints/skills/etc and attempt the best match in the system, creating an object of that blueprint or granting your character that skill or ability.
+allbox	                 create a box with every object
+auditblueprints	         audit blueprints
+axer	                 add all axe skills
+blink	                 teleport
+bordertest               screenbuffer performance test
+calm                     toggle enemy AI behavior
+clean                    remove all effects and stat penalties from the player body
+cleaneffects             remove all effects from the player body
+clearach!!!              clear all your achivements
+clearfactionmembership   clear player's faction membership
+clone	                 clone a target object
+cluber	                 add all cudgel skills
+completequest:<quest name>	
+conv:<id>[:<speakerblueprint>]	start a conversation <id> with optional speaker <speakerblueprint>
+convnode:<id>:<startnode>[:<speakerblueprint]	start a conversation <id> at start node <startnode> with optional speaker <speakerblueprint>
+cooktestfull:<domain,domain>	apply a random cooking effect with the given domains
+cooktestunits:<domain,domain>	apply a random unit effect with the given domains
+cool                     toggle cool mode
+curefungus               cures and cleans all fungal infections
+cureglotrot              cures glotrot
+cureironshank            cures ironshank
+cyber                    test cyber terminal
+day                      set the time to day
+decapitateme             well
+dismember:<limb name>    dismember a limb
+dude                     get a creature from the current zone's population
+factionrep <id> <amount> modify factionrep with a faction by amount
+fencer                   add all long blade skills
+find:<blueprint>         search the zone for a particular object blueprint
+findfarmers              find all the objects with the default farmer sprite
+finishqueststep:<quest name>:<step name>	
+fungone                  remove fungal infections
+garbagetest              test the GC
+geno:<name>              destroy all objects on the current map with the given blueprint or display name
+glotrot                  give yourself glotrot
+glotrotonset             give yourself glotrot onset
+glowcrust                get luminous infection
+godown:<n>               go down n levels
+godown:<n>               go down n levels
+heapshot                 take a heap snapshot
+hungry -or- famished     set the player's hunger level
+idkfa                    toggle god mode
+ironshank                give yourself ironshank
+ironshankonset           give yourself ironshank onset
+leadslugs                get a lot of lead slugs
+masterchef               add all cooking skills and some ingredients
+maxmod                   set the mod chance to 999
+mazetest                 test recursive backtrack maze generator
+memtest                  test memory performance
+minime                   create an evil twin
+mutation:<id>            search for a mutation to grant
+nanoterm                 build a test cyber terminal
+night                    set the time to night
+notlost                  remove the lost effect
+object:<id>              search for a specific object to create
+playerlevelmob           spawn a mob around the player's level
+playeronly               remove everyone but the player from the action queue
+popuptest                test popups
+pro                      gain high stats
+quest:<id>               search for a quest to begin
+questdebug               bring up an interactive quest debug ui
+randomrelic:<n>          generate n random relics
+rebuild                  attempt to rebuild the current zone
+reequip                  re-equip the current player's body with the AI equip routine
+regionalize	test the regionalizer
+relic	generate all relics in the history + one random relic for each type
+reload	hot load all game settings
+reveal1sultanhistory	reveal one random sultan secret
+revealsecret:<secret id>	
+roll:<die expression>	roll a die expression
+rollmax:<die expression>	get the maximum value of a die expression
+rollmin:<die expression>	get the minimum value of a die expression
+sblader	add all shortblade skills
+seed:<n>	set the world seed to n
+showcooldownminima	report all cooldowns
+showgenders	display all gender strings
+showintproperty:<prop>	display the value of an int property on the player
+showmygender	show the player's gender
+showpronounsets	show all pronoun sets
+showrandomfaction	display a random faction name
+showrandomfactionexceptbeasts	display a random faction name, except beasts
+showrandomfactionshortname	display a random faction's short name
+showrandomoldfaction	display a random old faction name
+showstringproperty:<prop>	display the value of a string property on the player
+skillpoints	add 20,000 skill points
+slow	set the player's speed to 25
+smartass	add all tinkering skills
+smartitem:<id>	search and create a specific blueprint only
+spend	spend player points randomly via AI algorithm
+stage2	complete quests and grant xp and gear for the early starting game play
+stage3	complete quests and grant xp and gear for play through golgotha
+stage4	complete quests and grant xp and gear for play post golgotha
+startquest:<quest name>	
+stat:<stat>:<n>	set <stat>'s base value to n (intelligence)
+stat:<statid>:<value>	
+statbonus:<stat>:<n>	set <stat>'s bonus value to n
+statbonus:<statid>:<value>	
+statpenalty:<stat>:<n>	set <stat>'s penalty value to n
+statpenalty:<statid>:<value>	
+sultanhistory	reveal all sultan secrets
+sultanreveal	reveal all sultan locations
+sultantest:<attribute>	create a sultan dungeon in the current world map square with the attributes listed
+supermutant	get all mutations
+swap	swap bodies with a target
+test437	show each cp437 character
+testcardinal	test cardinal numbers
+testhero:<base type>	create a creature and elevate it to a hero
+testobjects	test all possible dynamic encounter objects
+testordinal	test ordinal numbers
+testpets	test all possible village pet objects
+testpop	test the population manager
+testrig	grant survival, teleporation and clarvoyance
+teststringbuilder	unit test stringbuilder
+togglementalshields	toggle mental shield
+topevents	display top event id's
+traveler	set the player's rep to neutral with all factions
+trip	go prone
+tunneltest	test tunnel system
+unequip:<limb name>	
+villagereveal	reveal all villages
+wandermode	set the player's rep to neutral with all hostile factions
+wavetilegen	test tilegen
+websplat	test phase web splats
+whatami	displays the player body's blueprint
+where	display the current location id
+where?	copy current zone to clipboard
+xp:<amount>	grant an amount of xp
+xpmul:<amount>	set the global xp multiplier
+xy	show the player's x,y location
+zone:<id>	teleport to a matched zone id
+
