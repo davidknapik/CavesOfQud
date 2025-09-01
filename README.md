@@ -1,4 +1,14 @@
 
+Script to show your current location on the world map, and where you have been.
+
+Reads the player.log file which will scrabe the Building|Thawing logs. Also uses the cached.db to fill in locations been to in previous loads of the character.
+
+Currently need to change the script based on the GUID for your specific save directory.
+
+
+
+
+
 
 ###############################################################################
 # Original Perl implementation
