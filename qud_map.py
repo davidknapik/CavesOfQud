@@ -13,7 +13,7 @@ LOCATIONS_CSV = 'cities.csv'
 # --- Pygame Display Configuration ---
 SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 800
-HEADER_SIZE = 30  # <-- NEW: Space in pixels for the top/bottom/left/right headers
+HEADER_SIZE = 30
 BASE_CELL_SIZE = 8
 PARSANG_X_MAX = 80
 PARSANG_Y_MAX = 25
@@ -26,26 +26,25 @@ MAX_ZOOM = 10.0
 
 # --- Colors (RGB Tuples) ---
 CACHED_LOC_COLOR = (44, 105, 129)
-HEADER_BG_COLOR = (20, 20, 20) # <-- NEW: Background for header area
+HEADER_BG_COLOR = (20, 20, 20)
 COLOR_MAP = {
-    'cached': CACHED_LOC_COLOR,
-    'grey': (128, 128, 128),
-    'lightgrey': (211, 211, 211),
-    'magenta': (255, 0, 255),
-    'white': (255, 255, 255),
-    'black': (0, 0, 0),
+    'cached': CACHED_LOC_COLOR, 'grey': (128, 128, 128),
+    'lightgrey': (211, 211, 211), 'magenta': (255, 0, 255),
+    'white': (255, 255, 255), 'black': (0, 0, 0),
 }
 GRID_BASE_COLOR = (40, 40, 40)
 PARSANG_GRID_COLOR = (80, 80, 80)
 CURRENT_LOC_BORDER_COLOR = (255, 255, 0)
 
 # --- Global Data Structures ---
+# NEW STRUCTURE: zones = {z_level: {xy_string: {data}}}
 zones = {}
 current_location_str = "None"
+current_z_level = 10  # <-- NEW: State for current Z-level, default to surface
 
-# --- Utility & Core Logic Functions (Unchanged) ---
-def trim(s: str) -> str:
-    return s.strip()
+# --- Utility & Core Logic Functions ---
+
+def trim(s: str) -> str: return s.strip()
 
 def hex_to_rgb(hex_color: str) -> tuple:
     hex_color = hex_color.lstrip('#')
@@ -69,16 +68,28 @@ def read_locations_from_cache_db():
             zone_id_str = row[0]
             if zone_id_str and zone_id_str.startswith("JoppaWorld."):
                 zone_loc = zone_id_str.replace("JoppaWorld.", "")
-                zones.setdefault(zone_loc, {'color': 'cached'})
+                try:
+                    *xy_parts, z_part = zone_loc.split('.')
+                    xy_key = ".".join(xy_parts)
+                    z_level = int(z_part)
+                    # Use setdefault to create nested dictionaries as needed
+                    zones.setdefault(z_level, {}).setdefault(xy_key, {'color': 'cached'})
+                except ValueError:
+                    continue # Skip if the zone_loc format is invalid
         print(f"Loaded {len(rows)} historical locations from cache.\n")
     except sqlite3.Error as e:
         print(f"Error reading cache.db file: {e}")
 
 def read_player_log():
-    global current_location_str
+    global current_location_str, current_z_level
     player_log_file = os.path.join(SAVE_DIR, "Player.log")
     if not os.path.exists(player_log_file): return
-    for loc_data in zones.values(): loc_data.pop('current', None)
+
+    # Clear 'current' flag from ALL z-levels
+    for z_data in zones.values():
+        for loc_data in z_data.values():
+            loc_data.pop('current', None)
+
     current_location = None
     log_pattern = re.compile(r"INFO - Finished '(?:Thawing|Building) JoppaWorld\.(\d+\.\d+\.\d+\.\d+\.\d+)'")
     try:
@@ -87,11 +98,26 @@ def read_player_log():
                 match = log_pattern.search(line)
                 if match:
                     zone_loc = match.group(1)
-                    zones.setdefault(zone_loc, {})['color'] = 'grey'
-                    current_location = zone_loc
+                    try:
+                        *xy_parts, z_part = zone_loc.split('.')
+                        xy_key = ".".join(xy_parts)
+                        z_level = int(z_part)
+                        zones.setdefault(z_level, {}).setdefault(xy_key, {})['color'] = 'grey'
+                        current_location = zone_loc
+                    except ValueError:
+                        continue
         if current_location:
-            zones[current_location]['color'] = 'magenta'
-            zones[current_location]['current'] = True
+            *xy_parts, z_part = current_location.split('.')
+            xy_key = ".".join(xy_parts)
+            z_level = int(z_part)
+            
+            # --- Z-LEVEL CHANGE DETECTION ---
+            if z_level != current_z_level:
+                print(f"Z-Level changed from {current_z_level} to {z_level}!")
+                current_z_level = z_level
+
+            zones[z_level][xy_key]['color'] = 'magenta'
+            zones[z_level][xy_key]['current'] = True
             current_location_str = current_location
             print(f"Current Location: {current_location_str}\n")
         else:
@@ -112,29 +138,35 @@ def add_locations_from_csv():
                 match = csv_pattern.match(trim(line))
                 if match:
                     zone_loc, color, name = (trim(g) for g in match.groups())
-                    print(f"Loading {name} {zone_loc}\n")
-                    zones[zone_loc] = {'name': name, 'color': color}
+                    try:
+                        *xy_parts, z_part = zone_loc.split('.')
+                        xy_key = ".".join(xy_parts)
+                        z_level = int(z_part)
+                        print(f"Loading {name} {zone_loc}\n")
+                        zones.setdefault(z_level, {})[xy_key] = {'name': name, 'color': color}
+                    except ValueError:
+                        continue
     except IOError as e:
         print(f"Error reading locations CSV file: {e}")
 
 # --- Pygame Drawing & Transformation Functions ---
 
 def world_to_screen(world_x, world_y, zoom, camera_offset, map_area):
-    """Converts world coordinates to screen coordinates, accounting for the map area offset."""
     screen_x = (world_x * zoom) - camera_offset[0] + map_area.left
     screen_y = (world_y * zoom) - camera_offset[1] + map_area.top
     return int(screen_x), int(screen_y)
 
 def screen_to_world(screen_x, screen_y, zoom, camera_offset, map_area):
-    """Converts screen coordinates to world coordinates, accounting for the map area offset."""
     world_x = (screen_x - map_area.left + camera_offset[0]) / zoom
     world_y = (screen_y - map_area.top + camera_offset[1]) / zoom
     return world_x, world_y
 
-def draw_map(screen, zoom, camera_offset, map_area):
-    """Draws only the visible portion of the map grid within the specified map_area."""
+def draw_map(screen, zoom, camera_offset, map_area, z_level):
+    """Draws the map for a specific z_level."""
+    # Get only the zones for the current z-level. Default to empty if level not explored.
+    level_zones = zones.get(z_level, {})
+    
     effective_cell_size = BASE_CELL_SIZE * zoom
-    ZONE_DEPTH = 10
     world_tl_x, world_tl_y = screen_to_world(map_area.left, map_area.top, zoom, camera_offset, map_area)
     world_br_x, world_br_y = screen_to_world(map_area.right, map_area.bottom, zoom, camera_offset, map_area)
     start_gx = max(0, int(world_tl_x / BASE_CELL_SIZE))
@@ -149,8 +181,10 @@ def draw_map(screen, zoom, camera_offset, map_area):
             world_y = grid_y * BASE_CELL_SIZE
             screen_x, screen_y = world_to_screen(world_x, world_y, zoom, camera_offset, map_area)
             rect = pygame.Rect(screen_x, screen_y, int(effective_cell_size + 1), int(effective_cell_size + 1))
-            zone_loc = f"{parsang_x}.{parsang_y}.{zone_x}.{zone_y}.{ZONE_DEPTH}"
-            zone_data = zones.get(zone_loc, {})
+            
+            xy_key = f"{parsang_x}.{parsang_y}.{zone_x}.{zone_y}"
+            zone_data = level_zones.get(xy_key, {}) # Use the filtered dictionary
+            
             color_str = zone_data.get('color')
             final_color = GRID_BASE_COLOR
             if color_str:
@@ -179,51 +213,47 @@ def draw_grid_lines(screen, zoom, camera_offset, map_area):
         pygame.draw.line(screen, PARSANG_GRID_COLOR, start_pos, end_pos)
 
 def draw_headers(screen, font, zoom, camera_offset, map_area):
-    """Draws the parsang coordinate headers in the margins around the map area."""
-    if BASE_CELL_SIZE * zoom < 6: return # Hide headers if too zoomed out
-    
-    # --- X-Axis Headers (Top and Bottom) ---
+    if BASE_CELL_SIZE * zoom < 6: return
     world_tl_x, _ = screen_to_world(map_area.left, map_area.top, zoom, camera_offset, map_area)
     world_br_x, _ = screen_to_world(map_area.right, map_area.bottom, zoom, camera_offset, map_area)
     start_px = max(0, int(world_tl_x / (BASE_CELL_SIZE * ZONE_DIM)))
     end_px = min(PARSANG_X_MAX, int(world_br_x / (BASE_CELL_SIZE * ZONE_DIM)) + 1)
-    
     for px in range(start_px, end_px):
-        # Find the center of the parsang in world coordinates
         world_x = (px + 0.5) * ZONE_DIM * BASE_CELL_SIZE
         screen_x, _ = world_to_screen(world_x, 0, zoom, camera_offset, map_area)
-        
         if map_area.left <= screen_x <= map_area.right:
             text = font.render(str(px), True, COLOR_MAP['lightgrey'])
-            # Top header
-            text_rect = text.get_rect(center=(screen_x, map_area.top / 2))
-            screen.blit(text, text_rect)
-            # Bottom header
-            text_rect = text.get_rect(center=(screen_x, map_area.bottom + (SCREEN_HEIGHT - map_area.bottom) / 2))
-            screen.blit(text, text_rect)
-
-    # --- Y-Axis Headers (Left and Right) ---
+            text_rect_top = text.get_rect(center=(screen_x, map_area.top / 2))
+            screen.blit(text, text_rect_top)
+            text_rect_bottom = text.get_rect(center=(screen_x, map_area.bottom + (SCREEN_HEIGHT - map_area.bottom) / 2))
+            screen.blit(text, text_rect_bottom)
     _, world_tl_y = screen_to_world(map_area.left, map_area.top, zoom, camera_offset, map_area)
     _, world_br_y = screen_to_world(map_area.right, map_area.bottom, zoom, camera_offset, map_area)
     start_py = max(0, int(world_tl_y / (BASE_CELL_SIZE * ZONE_DIM)))
     end_py = min(PARSANG_Y_MAX, int(world_br_y / (BASE_CELL_SIZE * ZONE_DIM)) + 1)
-
     for py in range(start_py, end_py):
         world_y = (py + 0.5) * ZONE_DIM * BASE_CELL_SIZE
         _, screen_y = world_to_screen(0, world_y, zoom, camera_offset, map_area)
-        
         if map_area.top <= screen_y <= map_area.bottom:
             text = font.render(str(py), True, COLOR_MAP['lightgrey'])
-            # Left header
-            text_rect = text.get_rect(center=(map_area.left / 2, screen_y))
-            screen.blit(text, text_rect)
-            # Right header
-            text_rect = text.get_rect(center=(map_area.right + (SCREEN_WIDTH - map_area.right) / 2, screen_y))
-            screen.blit(text, text_rect)
+            text_rect_left = text.get_rect(center=(map_area.left / 2, screen_y))
+            screen.blit(text, text_rect_left)
+            text_rect_right = text.get_rect(center=(map_area.right + (SCREEN_WIDTH - map_area.right) / 2, screen_y))
+            screen.blit(text, text_rect_right)
 
 def draw_hud(screen, font):
+    """Draws the HUD, now including the current Z-level."""
+    depth = current_z_level - 10
+    if depth == 0:
+        depth_str = "Surface"
+    elif depth > 0:
+        depth_str = f"{depth} strata deep"
+    else:
+        depth_str = f"{abs(depth)} strata high"
+
     info_text = [
         f"Current: {current_location_str}",
+        f"Depth: {depth_str} (Z={current_z_level})", # <-- NEW Z-Level info
         "Controls:", "  Mouse Wheel to Zoom", "  Middle-Click + Drag to Pan"
     ]
     y_offset = 10
@@ -240,11 +270,8 @@ def main():
     clock = pygame.time.Clock()
     font = pygame.font.SysFont("consolas", 16)
     header_font = pygame.font.SysFont("consolas", 14, bold=True)
-
-    # --- NEW: Define the central map drawing area ---
     map_area = pygame.Rect(HEADER_SIZE, HEADER_SIZE, SCREEN_WIDTH - 2 * HEADER_SIZE, SCREEN_HEIGHT - 2 * HEADER_SIZE)
-
-    zoom_level = 1.0
+    zoom_level = 4.0
     camera_offset = [0, 0]
     is_panning = False
     pan_start_pos = (0, 0)
@@ -282,17 +309,12 @@ def main():
                 camera_offset[0] -= dx
                 camera_offset[1] -= dy
 
-        # --- Refactored Drawing Order ---
-        # 1. Fill entire screen with header color
         screen.fill(HEADER_BG_COLOR)
-        # 2. Fill the central map area with the map background color
         screen.fill(GRID_BASE_COLOR, map_area)
-        # 3. Draw map tiles and grid lines (clipped to map_area by their internal logic)
-        draw_map(screen, zoom_level, camera_offset, map_area)
+        # Pass the current_z_level to the drawing function
+        draw_map(screen, zoom_level, camera_offset, map_area, current_z_level)
         draw_grid_lines(screen, zoom_level, camera_offset, map_area)
-        # 4. Draw the headers in the margins
         draw_headers(screen, header_font, zoom_level, camera_offset, map_area)
-        # 5. Draw the HUD on top of everything
         draw_hud(screen, font)
         
         pygame.display.flip()
