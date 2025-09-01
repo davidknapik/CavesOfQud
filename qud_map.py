@@ -3,6 +3,7 @@ import sys
 import time
 import re
 import pygame
+import sqlite3 
 
 # --- Configuration (Same as before) ---
 SAVE_DIR = "C:\\Users\\owner\\AppData\\LocalLow\\Freehold Games\\CavesOfQud"
@@ -12,7 +13,7 @@ LOCATIONS_CSV = 'cities.csv'
 # --- Pygame Display Configuration ---
 SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 800
-BASE_CELL_SIZE = 8  # The default size of a cell at 1.0 zoom
+BASE_CELL_SIZE = 8
 PARSANG_X_MAX = 80
 PARSANG_Y_MAX = 25
 ZONE_DIM = 3
@@ -21,9 +22,11 @@ ZONE_DIM = 3
 ZOOM_SPEED = 0.1
 MIN_ZOOM = 0.2
 MAX_ZOOM = 10.0
-
+"#2C6981"
 # --- Colors (RGB Tuples) ---
+CACHED_LOC_COLOR = (44, 105, 129) # Teal for locations from DB cache
 COLOR_MAP = {
+    'cached': CACHED_LOC_COLOR,
     'grey': (128, 128, 128),
     'lightgrey': (211, 211, 211),
     'magenta': (255, 0, 255),
@@ -38,18 +41,58 @@ CURRENT_LOC_BORDER_COLOR = (255, 255, 0)
 zones = {}
 current_location_str = "None"
 
-# --- Utility & Core Logic Functions (Mostly unchanged) ---
+# --- Utility & Core Logic Functions ---
 
 def trim(s: str) -> str:
     return s.strip()
-
-# "#0011FF" # Blue
 
 def hex_to_rgb(hex_color: str) -> tuple:
     hex_color = hex_color.lstrip('#')
     if len(hex_color) == 6:
         return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
     return COLOR_MAP['white']
+
+# --- NEW FUNCTION to read from sqlite3 cache.db ---
+def read_locations_from_cache_db():
+    """
+    Reads previously visited ZoneIDs from the cache.db sqlite file.
+    These are given the lowest priority and will be overwritten by other sources.
+    """
+    db_path = os.path.join(SAVE_DIR, "Synced\Saves", SAVE_UID, "cache.db")
+
+    if not os.path.exists(db_path):
+        print(f"Warning - {db_path} file not found, skipping historical data.\n")
+        return
+
+    print("Loading historical data from cache.db...")
+    try:
+        # Connect to the SQLite database
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        # Execute the query to get all ZoneIDs from the FrozenZone table
+        cursor.execute("SELECT ZoneID FROM FrozenZone")
+        rows = cursor.fetchall()
+
+        # Close the connection
+        conn.close()
+
+        for row in rows:
+            # row[0] will be a string like "JoppaWorld.11.22.1.2.11"
+            zone_id_str = row[0]
+            if zone_id_str and zone_id_str.startswith("JoppaWorld."):
+                # Extract the coordinate part of the string
+                zone_loc = zone_id_str.replace("JoppaWorld.", "")
+
+                # Use setdefault to add the zone ONLY IF it's not already present.
+                # This respects Condition 2: lower priority than cities.csv or player.log.
+                zones.setdefault(zone_loc, {'color': 'cached'})
+
+        print(f"Loaded {len(rows)} historical locations from cache.\n")
+
+    except sqlite3.Error as e:
+        print(f"Error reading cache.db file: {e}")
+
 
 def read_player_log():
     global current_location_str
@@ -68,6 +111,7 @@ def read_player_log():
                 match = log_pattern.search(line)
                 if match:
                     zone_loc = match.group(1)
+                    # Use setdefault to create the dict if it's a new location
                     zones.setdefault(zone_loc, {})['color'] = 'grey'
                     current_location = zone_loc
         if current_location:
@@ -94,36 +138,30 @@ def add_locations_from_csv():
                 if match:
                     zone_loc, color, name = (trim(g) for g in match.groups())
                     print(f"Loading {name} {zone_loc}\n")
+                    # This will overwrite any data from cache.db, which is correct
                     zones[zone_loc] = {'name': name, 'color': color}
     except IOError as e:
         print(f"Error reading locations CSV file: {e}")
 
-# --- Pygame Drawing & Transformation Functions ---
+# --- Pygame Drawing & Transformation Functions (Unchanged) ---
 
 def world_to_screen(world_x, world_y, zoom, camera_offset):
-    """Converts world coordinates (in pixels) to screen coordinates."""
     screen_x = (world_x * zoom) - camera_offset[0]
     screen_y = (world_y * zoom) - camera_offset[1]
     return int(screen_x), int(screen_y)
 
 def screen_to_world(screen_x, screen_y, zoom, camera_offset):
-    """Converts screen coordinates to world coordinates (in pixels)."""
     world_x = (screen_x + camera_offset[0]) / zoom
     world_y = (screen_y + camera_offset[1]) / zoom
     return world_x, world_y
 
 def draw_map(screen, zoom, camera_offset):
-    """Draws only the visible portion of the map grid."""
     effective_cell_size = BASE_CELL_SIZE * zoom
     ZONE_DEPTH = 10
 
-    # --- Optimization: Calculate which cells are visible ---
-    cam_x, cam_y = camera_offset
-    # Get the world coordinates of the top-left and bottom-right of the screen
     world_tl_x, world_tl_y = screen_to_world(0, 0, zoom, camera_offset)
     world_br_x, world_br_y = screen_to_world(SCREEN_WIDTH, SCREEN_HEIGHT, zoom, camera_offset)
 
-    # Determine the range of grid cells to draw
     start_gx = max(0, int(world_tl_x / BASE_CELL_SIZE))
     start_gy = max(0, int(world_tl_y / BASE_CELL_SIZE))
     end_gx = min(PARSANG_X_MAX * ZONE_DIM, int(world_br_x / BASE_CELL_SIZE) + 1)
@@ -134,14 +172,10 @@ def draw_map(screen, zoom, camera_offset):
             parsang_x, zone_x = divmod(grid_x, ZONE_DIM)
             parsang_y, zone_y = divmod(grid_y, ZONE_DIM)
 
-            # Convert grid coordinates to world pixel coordinates
             world_x = grid_x * BASE_CELL_SIZE
             world_y = grid_y * BASE_CELL_SIZE
-
-            # Convert world pixel coordinates to screen coordinates
             screen_x, screen_y = world_to_screen(world_x, world_y, zoom, camera_offset)
-
-            rect = pygame.Rect(screen_x, screen_y, int(effective_cell_size), int(effective_cell_size))
+            rect = pygame.Rect(screen_x, screen_y, int(effective_cell_size + 1), int(effective_cell_size + 1)) # Add 1 to avoid gaps
 
             zone_loc = f"{parsang_x}.{parsang_y}.{zone_x}.{zone_y}.{ZONE_DEPTH}"
             zone_data = zones.get(zone_loc, {})
@@ -157,15 +191,12 @@ def draw_map(screen, zoom, camera_offset):
                 pygame.draw.rect(screen, CURRENT_LOC_BORDER_COLOR, rect, width=max(1, int(2 * zoom)))
 
 def draw_grid_lines(screen, zoom, camera_offset):
-    """Draws only the visible parsang grid lines."""
     effective_cell_size = BASE_CELL_SIZE * zoom
-    if effective_cell_size < 4: return # Don't draw grid if cells are too small
+    if effective_cell_size < 4: return
 
-    # Similar optimization logic as draw_map
     world_tl_x, world_tl_y = screen_to_world(0, 0, zoom, camera_offset)
     world_br_x, world_br_y = screen_to_world(SCREEN_WIDTH, SCREEN_HEIGHT, zoom, camera_offset)
     
-    # Vertical lines
     start_parsang_x = max(0, int(world_tl_x / (BASE_CELL_SIZE * ZONE_DIM)))
     end_parsang_x = min(PARSANG_X_MAX, int(world_br_x / (BASE_CELL_SIZE * ZONE_DIM)) + 1)
     for i in range(start_parsang_x, end_parsang_x + 1):
@@ -174,7 +205,6 @@ def draw_grid_lines(screen, zoom, camera_offset):
         end_pos = world_to_screen(world_x, world_br_y, zoom, camera_offset)
         pygame.draw.line(screen, PARSANG_GRID_COLOR, start_pos, end_pos)
     
-    # Horizontal lines
     start_parsang_y = max(0, int(world_tl_y / (BASE_CELL_SIZE * ZONE_DIM)))
     end_parsang_y = min(PARSANG_Y_MAX, int(world_br_y / (BASE_CELL_SIZE * ZONE_DIM)) + 1)
     for i in range(start_parsang_y, end_parsang_y + 1):
@@ -184,7 +214,6 @@ def draw_grid_lines(screen, zoom, camera_offset):
         pygame.draw.line(screen, PARSANG_GRID_COLOR, start_pos, end_pos)
 
 def draw_hud(screen, font):
-    """Draws the Heads-Up Display with info and controls."""
     info_text = [
         f"Current: {current_location_str}",
         "Controls:",
@@ -192,7 +221,7 @@ def draw_hud(screen, font):
         "  Middle-Click + Drag to Pan"
     ]
     y_offset = 10
-    for i, line in enumerate(info_text):
+    for line in info_text:
         text_surface = font.render(line, True, COLOR_MAP['white'], COLOR_MAP['black'])
         screen.blit(text_surface, (10, y_offset))
         y_offset += font.get_height()
@@ -206,25 +235,26 @@ def main():
     clock = pygame.time.Clock()
     font = pygame.font.SysFont("consolas", 18)
 
-    # --- State Variables for Camera ---
     zoom_level = 1.0
     camera_offset = [0, 0]
     is_panning = False
     pan_start_pos = (0, 0)
 
-    # Initial Data Load
+    # --- UPDATED Initial Data Load Order ---
     print("Loading initial location data...")
+    # 1. Load historical data first (lowest priority)
+    read_locations_from_cache_db()
+    # 2. Load cities, which can overwrite historical data
     add_locations_from_csv()
+    # 3. Load current session data, which can overwrite both
     read_player_log()
 
     # Timer for Log File Polling
     UPDATE_LOG_EVENT = pygame.USEREVENT + 1
     pygame.time.set_timer(UPDATE_LOG_EVENT, 5000)
 
-    # The Main Loop
     running = True
     while running:
-        # --- Event Handling ---
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -233,25 +263,22 @@ def main():
                 print("Checking for updates in Player.log...")
                 read_player_log()
 
-            # --- Zooming Logic ---
             if event.type == pygame.MOUSEWHEEL:
                 mouse_pos = pygame.mouse.get_pos()
                 world_pos_before_zoom = screen_to_world(mouse_pos[0], mouse_pos[1], zoom_level, camera_offset)
 
-                if event.y > 0: # Scroll up to zoom in
+                if event.y > 0:
                     zoom_level *= (1 + ZOOM_SPEED)
-                else: # Scroll down to zoom out
+                else:
                     zoom_level /= (1 + ZOOM_SPEED)
-                zoom_level = max(MIN_ZOOM, min(MAX_ZOOM, zoom_level)) # Clamp zoom
+                zoom_level = max(MIN_ZOOM, min(MAX_ZOOM, zoom_level))
 
                 world_pos_after_zoom = screen_to_world(mouse_pos[0], mouse_pos[1], zoom_level, camera_offset)
                 
-                # Adjust camera to keep mouse position fixed relative to the world
                 camera_offset[0] += (world_pos_after_zoom[0] - world_pos_before_zoom[0]) * zoom_level
                 camera_offset[1] += (world_pos_after_zoom[1] - world_pos_before_zoom[1]) * zoom_level
 
-            # --- Panning Logic ---
-            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 2: # Middle mouse button
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 2:
                 is_panning = True
                 pan_start_pos = event.pos
             if event.type == pygame.MOUSEBUTTONUP and event.button == 2:
@@ -263,15 +290,13 @@ def main():
                 camera_offset[1] -= dy
                 pan_start_pos = event.pos
 
-        # --- Drawing ---
         screen.fill(GRID_BASE_COLOR)
         draw_map(screen, zoom_level, camera_offset)
         draw_grid_lines(screen, zoom_level, camera_offset)
         draw_hud(screen, font)
         
-        # --- Update Display ---
         pygame.display.flip()
-        clock.tick(60) # Limit to 60 FPS
+        clock.tick(60)
 
     pygame.quit()
     sys.exit()
