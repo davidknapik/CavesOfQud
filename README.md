@@ -1,174 +1,95 @@
+# Caves of Qud - Live Parsang Map
 
-Script to show your current location on the world map, and where you have been.
+A real-time, interactive map viewer for the game [Caves of Qud](https://www.cavesofqud.com/). This Python script reads your game's log and cache files to generate a live map that tracks your current location, previously visited areas, and custom landmarks across different Z-levels.
 
-Reads the player.log file which will scrabe the Building|Thawing logs. Also uses the cached.db to fill in locations been to in previous loads of the character.
+---
 
-Currently need to change the script based on the GUID for your specific save directory.
+## Features
 
+*   **Live Player Tracking:** Monitors the `Player.log` file to update your character's position on the map in real-time.
+*   **Z-Level Filtering:** Automatically detects when you change depth (e.g., go underground) and redraws the map to show only the locations discovered at that Z-level.
+*   **Historical Data:** Reads the `cache.db` file from your save game to display all zones you have visited in previous sessions, giving a complete picture of your explorations.
+*   **Custom Landmarks:** Load custom locations, names, and colors from a `cities.csv` file to permanently mark important sites like villages, ruins, or lairs.
+*   **Interactive Viewport:**
+    *   **Zoom:** Use the **mouse wheel** to zoom in and out. The zoom is centered on your cursor for intuitive navigation.
+    *   **Pan:** **Click and drag with the middle mouse button** to pan the map and explore the world.
+*   **Dynamic Coordinate Headers:** The map is framed by row and column headers that display the major parsang coordinates, updating as you pan the view.
+*   **Optimized Rendering:** Only the visible portion of the map is drawn to the screen, ensuring smooth performance even when zoomed in on the large world map.
 
+## Prerequisites
 
+Before you begin, ensure you have the following installed:
 
+*   **Python 3.x:** Can be downloaded from the [official Python website](https://www.python.org/downloads/).
+*   **Pygame:** A cross-platform set of Python modules designed for writing video games.
 
+## Installation
 
-###############################################################################
-# Original Perl implementation
-###############################################################################
+1.  **Ensure Python is installed.** You can check this by opening a terminal or command prompt and typing `python --version`.
 
-How the Script Works (High-Level Overview):
+2.  **Install the Pygame library.** Open your terminal or command prompt and run the following command:
+    ```sh
+    pip install pygame
+    ```
 
-    Initialization:
+3.  **Download the script.** Save the `qud_map.py` file to a location of your choice on your computer.
 
-        Sets up paths to game files and the output HTML file.
+## Configuration
 
-        Initializes a %zone hash to store location data (name, color, current status).
+You **must** configure the script to point to your Caves of Qud save directory before running it.
 
-    Main Loop (Continuous Monitoring):
+1.  **Open `qud_map.py`** in a text editor.
 
-        Enters an infinite loop to constantly check for changes.
+2.  **Locate the Configuration section** at the top of the file:
+    ```python
+    # --- Configuration (Same as before) ---
+    SAVE_DIR = "C:\\Users\\owner\\AppData\\LocalLow\\Freehold Games\\CavesOfQud"
+    SAVE_UID = "1cb0687f-93fc-4c45-b53a-a2a33a9e0e36"
+    LOCATIONS_CSV = 'cities.csv'
+    ```
 
-        Every 10 seconds, it checks the modification time of Player.log.
+3.  **Update `SAVE_DIR`:** Change the path to match your Caves of Qud installation. It is typically located in your user's `AppData\LocalLow` folder on Windows.
 
-        If Player.log has been modified recently (more than 15 seconds since the last check), it triggers a map regeneration.
+4.  **Update `SAVE_UID`:** This is the most important step.
+    *   Navigate to your `SAVE_DIR` and open the `Saves` or `Synced\Saves` subfolder.
+    *   Inside, you will find a folder with a long, unique name like `1cb0687f-93fc-4c45-b53a-a2a33a9e0e36`. This is your Save UID.
+    *   Copy this folder name and paste it as the value for the `SAVE_UID` variable.
 
-    Map Regeneration Steps:
+5.  **(Optional) Create `cities.csv`:**
+    *   If you wish to add permanent landmarks, create a file named `cities.csv` inside your main `SAVE_DIR`.
+    *   Each line in the file defines one landmark in the format: `coordinate,color,name`.
+    *   **Example:** `77.23.1.0.10,#554f97,Joppa`
+    *   This data has a high priority and will be displayed over historical and current session data.
 
-        read_player_log():
+## Usage
 
-            Reads Player.log from beginning to end.
+1.  Save your changes to the `qud_map.py` file after configuring the paths.
+2.  Run the script from your terminal:
+    ```sh
+    python qud_map.py
+    ```
+3.  A Pygame window will open, displaying the world map.
+4.  Launch and play Caves of Qud. The map will automatically update every 5 seconds to reflect your in-game movement and discoveries.
 
-            Looks for lines indicating "Thawing" or "Building" zones, which signify the player entering a new area.
+### Controls
 
-            The last such location found in the log is marked as the player's CURRENT location (displayed in magenta).
+*   **Zoom:** Use the **Mouse Wheel** up and down.
+*   **Pan:** Click and hold the **Middle Mouse Button** and drag the mouse.
 
-            All other zones found in the log are marked as visited (displayed in grey).
+---
 
-            It clears the CURRENT flag from any previously marked location before processing to ensure only one location is current.
+## How It Works
 
-        add_locations() (Currently Commented Out):
+The script visualizes data from three different sources, loading them in a specific order of priority to ensure the map is accurate.
 
-            If enabled, this would read cities.csv.
+1.  **`cache.db` (Lowest Priority):** The SQLite database is read first to populate the map with all historically visited zones. These are displayed in a distinct color (dark teal).
+2.  **`cities.csv` (Medium Priority):** The custom landmarks file is read next. Any location defined here will overwrite the historical data, allowing you to give important locations a permanent, custom color and name.
+3.  **`Player.log` (Highest Priority):** The log for the current game session is monitored continuously. Data from this file (visited zones and current location) will overwrite all other data, ensuring that the map always reflects the state of your active game.
 
-            It would populate the %zone hash with predefined city names and their specific colors based on their coordinates. This allows for custom labeling and coloring of important locations.
+## License
 
-        gen_html_output():
+This project is licensed under the MIT License.
 
-            Opens parsang_map.html for writing.
+## Acknowledgments
 
-            Calls helper subroutines to write the HTML header (including CSS), the main HTML table (the map itself), and the HTML footer.
-
-    HTML Generation Details:
-
-        gen_html_header(): Writes the basic HTML structure, page title, a meta tag for automatic refresh (every 30 seconds), and all the CSS styles for the table, cells, and borders. The CSS defines visual cues for the 3x3 "parsang" grid and highlights the current location.
-
-        gen_html_table(): This is the core map generation.
-
-            It creates a large HTML table.
-
-            It iterates through parsang_y (25 rows) and zone_y (3 rows within each parsang), then parsang_x (80 columns) and zone_x (3 columns within each parsang). This results in a grid of (25 * 3) x (80 * 3) cells.
-
-            For each cell, it constructs a unique zone_loc string (e.g., "1.1.1.1.10").
-
-            It checks the %zone hash for data related to this zone_loc:
-
-                If a NAME exists (from cities.csv), it displays the city name.
-
-                If a COLOR exists (from Player.log or cities.csv), it sets the cell's background color.
-
-                If the CURRENT flag is set, it applies a special "current-location" CSS class to make the border magenta and thicker.
-
-            It also applies CSS classes (border-top, border-left) to create the thicker red borders that delineate the larger 3x3 parsang grids.
-
-        gen_html_footer(): Closes the HTML document.
-
-    Helper trim() Subroutine: Removes leading and trailing whitespace from a string, used when parsing data from CSV.
-
-In essence, this script creates a live, auto-refreshing map of your Caves of Qud adventures by constantly reading your game log and translating your movements into a visual HTML representation.
-
-
-
-###############################################################################
-# Key Changes and Best Practices in Python:
-###############################################################################
-
-
-    Shebang and Imports:
-
-        #!/usr/bin/env python3: Standard Python shebang.
-
-        import os, import time, import re, from datetime import datetime: Imports necessary modules. os for path manipulation, time for sleep and getmtime, re for regular expressions, datetime for current timestamp.
-
-    Configuration:
-
-        Global constants are defined using UPPER_SNAKE_CASE (e.g., SAVE_DIR). This is a Python convention for constants.
-
-        Crucially, you need to update SAVE_DIR and SAVE_UID to match your actual game installation.
-
-    Global Data Structure (zones dictionary):
-
-        The %zone hash in Perl becomes the zones dictionary in Python.
-
-        Instead of zones{$_}{COLOR} = 'lightgrey', Python uses zones[zone_loc] = zones.get(zone_loc, {}) to ensure the inner dictionary exists before trying to set a key within it, preventing KeyError.
-
-        Dictionary keys for zone attributes are lowercase strings ('name', 'color', 'current').
-
-    trim() Function:
-
-        Perl's sub trim becomes a standard Python function def trim(s: str) -> str:.
-
-        Uses the built-in string method s.strip() which is more Pythonic and efficient than a regex for this purpose.
-
-        Includes type hints (s: str, -> str) for better code readability and maintainability.
-
-    File Handling:
-
-        Uses os.path.join() for constructing file paths. This is cross-platform compatible (handles \ on Windows and / on Linux/macOS automatically).
-
-        Uses with open(...) as f: for file operations. This is the preferred Pythonic way as it automatically handles closing the file, even if errors occur.
-
-        Added encoding='utf-8', errors='ignore' to open() calls for Player.log and cities.csv to handle potential encoding issues gracefully, which can often arise with game logs.
-
-    Error Handling:
-
-        Uses try...except blocks for file operations (IOError, OSError) to catch and report errors gracefully instead of dieing abruptly.
-
-        Includes checks with os.path.exists() before trying to open files or directories.
-
-    Regular Expressions (re module):
-
-        Uses re.compile() to pre-compile regex patterns. This is a performance optimization when the same pattern is used repeatedly in a loop (like in read_player_log and add_locations_from_csv).
-
-        match = log_pattern.search(line): search() looks for the pattern anywhere in the string.
-
-        match = csv_pattern.match(line): match() looks for the pattern only at the beginning of the string (like Perl's ^ anchor).
-
-        match.group(1) or match.groups() to extract captured parts.
-
-    Main Loop (main_loop() function):
-
-        Encapsulated the main logic in a function main_loop() and called it from if __name__ == "__main__":. This is a standard Python entry point pattern.
-
-        time.sleep(10) replaces sleep(10).
-
-        os.path.getmtime() gets the last modification time, replacing Perl's stat()[9].
-
-        The logic for detecting file changes is slightly simpler: current_modified_time != last_modified_time. Perl's > 15 was a heuristic that might sometimes miss a quick save, but != is more robust for checking if any change happened.
-
-    HTML Generation Functions:
-
-        Instead of print HTMLOUT (...), the Python functions return multi-line strings (using f-strings for easy variable interpolation).
-
-        These strings are then written to the file in generate_html_output(). This approach separates logic from I/O, making functions more testable and reusable.
-
-        datetime.now().strftime('%Y-%m-%d %H:%M:%S') provides a formatted timestamp.
-
-        Small CSS additions: white-space: nowrap; overflow: hidden; to td style to prevent text wrapping in cells, which makes the grid cleaner.
-
-        td_classes list is used to dynamically build the class attribute string, which is more flexible than conditional string concatenation.
-
-    read_zone_cache_dir() and add_locations_from_csv() in Main Loop:
-
-        The read_zone_cache_dir() call is still commented out in main_loop() to mirror the original Perl script.
-
-        add_locations_from_csv() is called once at the beginning of main_loop() rather than every iteration. This is a best practice, as city definitions are unlikely to change during script execution. If they could, you would move it inside the loop.
-
-This Python version is more readable, maintainable, and robust, aligning with common Python best practices. Remember to update the SAVE_DIR and SAVE_UID variables to match your system!
+A big thank you to **Freehold Games** for creating the amazing and deeply immersive Caves of Qud.
