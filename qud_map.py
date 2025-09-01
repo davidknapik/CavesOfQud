@@ -6,7 +6,7 @@ import pygame
 
 # --- Configuration (Same as before) ---
 SAVE_DIR = "C:\\Users\\owner\\AppData\\LocalLow\\Freehold Games\\CavesOfQud"
-SAVE_UID = "0469531a-048d-4549-b26d-88034706eeac"
+SAVE_UID = "1cb0687f-93fc-4c45-b53a-a2a33a9e0e36"
 LOCATIONS_CSV = 'cities.csv'
 
 # --- Pygame Display Configuration ---
@@ -61,7 +61,7 @@ def read_player_log():
         loc_data.pop('current', None)
 
     current_location = None
-    log_pattern = re.compile(r"INFO - Finished '(?:Thawing|Building) .+\.(\d+\.\d+\.\d+\.\d+\.\d+)'")
+    log_pattern = re.compile(r"INFO - Finished '(?:Thawing|Building) JoppaWorld\.(\d+\.\d+\.\d+\.\d+\.\d+)'")
     try:
         with open(player_log_file, 'r', encoding='utf-8', errors='ignore') as f:
             for line in f:
@@ -74,6 +74,7 @@ def read_player_log():
             zones[current_location]['color'] = 'magenta'
             zones[current_location]['current'] = True
             current_location_str = current_location
+            print(f"Current Location: {current_location_str}\n")
         else:
             current_location_str = "None"
     except IOError as e:
