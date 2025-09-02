@@ -5,7 +5,7 @@ import re
 import pygame
 import sqlite3
 
-# --- Configuration (Same as before) ---
+# --- Configuration ---
 SAVE_DIR = "C:\\Users\\owner\\AppData\\LocalLow\\Freehold Games\\CavesOfQud"
 SAVE_UID = "1cb0687f-93fc-4c45-b53a-a2a33a9e0e36"
 LOCATIONS_CSV = 'cities.csv'
@@ -20,13 +20,14 @@ PARSANG_Y_MAX = 25
 ZONE_DIM = 3
 
 # --- Zoom & Pan Configuration ---
-ZOOM_SPEED = 0.5  # <-- UPDATED
+ZOOM_SPEED = 0.5
 MIN_ZOOM = 0.2
 MAX_ZOOM = 10.0
 
 # --- Colors (RGB Tuples) ---
 CACHED_LOC_COLOR = (44, 105, 129)
 HEADER_BG_COLOR = (20, 20, 20)
+NAME_TEXT_COLOR = (255, 255, 255) # <-- NEW: Color for city name labels
 COLOR_MAP = {
     'cached': CACHED_LOC_COLOR, 'grey': (128, 128, 128),
     'lightgrey': (211, 211, 211), 'magenta': (255, 0, 255),
@@ -136,7 +137,7 @@ def add_locations_from_csv():
     except IOError as e:
         print(f"Error reading locations CSV file: {e}")
 
-# --- Pygame Drawing & Transformation Functions (Unchanged) ---
+# --- Pygame Drawing & Transformation Functions ---
 def world_to_screen(world_x, world_y, zoom, camera_offset, map_area):
     screen_x = (world_x * zoom) - camera_offset[0] + map_area.left
     screen_y = (world_y * zoom) - camera_offset[1] + map_area.top
@@ -170,6 +171,46 @@ def draw_map(screen, zoom, camera_offset, map_area, z_level):
             pygame.draw.rect(screen, final_color, rect)
             if zone_data.get('current'):
                 pygame.draw.rect(screen, CURRENT_LOC_BORDER_COLOR, rect, width=max(1, int(2 * zoom)))
+
+# --- NEW draw_names function ---
+def draw_names(screen, zoom, camera_offset, map_area, z_level, font_cache):
+    """Draws scaled city/landmark names on the map."""
+    level_zones = zones.get(z_level, {})
+    
+    # Calculate scaled font size
+    font_size = int(3 * zoom)
+    # Don't render if text is too small to be legible
+    if font_size < 5:
+        return
+
+    # Use a cached font object for performance
+    if font_size not in font_cache:
+        font_cache[font_size] = pygame.font.SysFont("consolas", font_size, bold=False)
+    font = font_cache[font_size]
+
+    # Get the visible area to only draw names that are on screen
+    world_tl_x, world_tl_y = screen_to_world(map_area.left, map_area.top, zoom, camera_offset, map_area)
+    world_br_x, world_br_y = screen_to_world(map_area.right, map_area.bottom, zoom, camera_offset, map_area)
+    start_gx, start_gy = max(0, int(world_tl_x / BASE_CELL_SIZE)), max(0, int(world_tl_y / BASE_CELL_SIZE))
+    end_gx, end_gy = min(PARSANG_X_MAX * ZONE_DIM, int(world_br_x / BASE_CELL_SIZE) + 1), min(PARSANG_Y_MAX * ZONE_DIM, int(world_br_y / BASE_CELL_SIZE) + 1)
+
+    for grid_y in range(start_gy, end_gy):
+        for grid_x in range(start_gx, end_gx):
+            parsang_x, zone_x = divmod(grid_x, ZONE_DIM)
+            parsang_y, zone_y = divmod(grid_y, ZONE_DIM)
+            
+            xy_key = f"{parsang_x}.{parsang_y}.{zone_x}.{zone_y}"
+            zone_data = level_zones.get(xy_key, {})
+
+            if 'name' in zone_data:
+                # Center the text in the middle of the cell
+                world_x = (grid_x + 0.5) * BASE_CELL_SIZE
+                world_y = (grid_y + 0.5) * BASE_CELL_SIZE
+                screen_x, screen_y = world_to_screen(world_x, world_y, zoom, camera_offset, map_area)
+                
+                text_surface = font.render(zone_data['name'], True, NAME_TEXT_COLOR)
+                text_rect = text_surface.get_rect(center=(screen_x, screen_y))
+                screen.blit(text_surface, text_rect)
 
 def draw_grid_lines(screen, zoom, camera_offset, map_area):
     if BASE_CELL_SIZE * zoom < 4: return
@@ -207,36 +248,29 @@ def draw_headers(screen, font, zoom, camera_offset, map_area):
             screen.blit(text, text.get_rect(center=(map_area.left / 2, screen_y)))
             screen.blit(text, text.get_rect(center=(map_area.right + (SCREEN_WIDTH - map_area.right) / 2, screen_y)))
 
-def draw_hud(screen, font, show_controls, follow_mode):
+def draw_hud(screen, font, show_controls, follow_mode, show_names):
     depth = current_z_level - 10
     depth_str = "Surface" if depth == 0 else f"{depth} strata deep" if depth > 0 else f"{abs(depth)} strata high"
-
-    info_text = [
-        f"Current: {current_location_str}",
-        f"Depth: {depth_str} (Z={current_z_level})",
-    ]
-    
-    # Conditionally add the controls section
+    info_text = [ f"Current: {current_location_str}", f"Depth: {depth_str} (Z={current_z_level})", ]
     if show_controls:
         follow_status = "ON" if follow_mode else "OFF"
+        names_status = "ON" if show_names else "OFF" # <-- NEW
         info_text.extend([
             " ", "Controls:", "  Mouse Wheel to Zoom", "  Middle-Click + Drag to Pan",
-            f"  Follow Mode: {follow_status} (F)", # <-- MOVED HERE
+            f"  Follow Mode: {follow_status} (F)",
+            f"  Show Names: {names_status} (N)", # <-- NEW
         ])
-    
-    # Add the toggle hint at the end
     info_text.append(f"  Press 'H' to {'hide' if show_controls else 'show'} controls")
-    
-    y_offset = 10
+    y_offset = 30
+    x_offset = 30 
     for line in info_text:
         text_surface = font.render(line, True, COLOR_MAP['white'], COLOR_MAP['black'])
-        screen.blit(text_surface, (10, y_offset))
+        screen.blit(text_surface, (x_offset, y_offset))
         y_offset += font.get_height()
 
 # --- Main Program Loop ---
 def main():
-    global current_location_str  # <-- THE FIX: Tell this function to use the global variable
-
+    global current_location_str
     pygame.init()
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     pygame.display.set_caption("Caves of Qud - Live Parsang Map")
@@ -251,6 +285,8 @@ def main():
     pan_start_pos = (0, 0)
     show_controls_hud = True
     follow_mode = True
+    show_names = True # <-- NEW: State for toggling names
+    name_font_cache = {} # <-- NEW: Cache for scaled fonts
 
     print("Loading initial location data...")
     read_locations_from_cache_db()
@@ -275,6 +311,8 @@ def main():
                 if event.key == pygame.K_f:
                     follow_mode = not follow_mode
                     print(f"Follow mode {'enabled' if follow_mode else 'disabled'}.")
+                if event.key == pygame.K_n: # <-- NEW
+                    show_names = not show_names
 
             if event.type == pygame.MOUSEWHEEL:
                 mouse_pos = pygame.mouse.get_pos()
@@ -309,12 +347,18 @@ def main():
                 print(f"Warning: Could not parse current_location_str: {current_location_str}")
                 current_location_str = "None"
 
+        # --- UPDATED Drawing Order ---
         screen.fill(HEADER_BG_COLOR)
         screen.fill(GRID_BASE_COLOR, map_area)
         draw_map(screen, zoom_level, camera_offset, map_area, current_z_level)
         draw_grid_lines(screen, zoom_level, camera_offset, map_area)
+        
+        # Draw names on top of the map if enabled
+        if show_names:
+            draw_names(screen, zoom_level, camera_offset, map_area, current_z_level, name_font_cache)
+        
         draw_headers(screen, header_font, zoom_level, camera_offset, map_area)
-        draw_hud(screen, font, show_controls_hud, follow_mode)
+        draw_hud(screen, font, show_controls_hud, follow_mode, show_names)
         
         pygame.display.flip()
         clock.tick(60)
