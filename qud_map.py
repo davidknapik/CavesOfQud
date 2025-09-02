@@ -207,7 +207,6 @@ def draw_headers(screen, font, zoom, camera_offset, map_area):
             screen.blit(text, text.get_rect(center=(map_area.left / 2, screen_y)))
             screen.blit(text, text.get_rect(center=(map_area.right + (SCREEN_WIDTH - map_area.right) / 2, screen_y)))
 
-# --- MODIFIED draw_hud function ---
 def draw_hud(screen, font, show_controls, follow_mode):
     depth = current_z_level - 10
     depth_str = "Surface" if depth == 0 else f"{depth} strata deep" if depth > 0 else f"{abs(depth)} strata high"
@@ -219,13 +218,13 @@ def draw_hud(screen, font, show_controls, follow_mode):
     
     # Conditionally add the controls section
     if show_controls:
+        follow_status = "ON" if follow_mode else "OFF"
         info_text.extend([
             " ", "Controls:", "  Mouse Wheel to Zoom", "  Middle-Click + Drag to Pan",
+            f"  Follow Mode: {follow_status} (F)", # <-- MOVED HERE
         ])
     
-    # Add toggle hints
-    follow_status = "ON" if follow_mode else "OFF"
-    info_text.append(f"  Follow Mode: {follow_status} (F)")
+    # Add the toggle hint at the end
     info_text.append(f"  Press 'H' to {'hide' if show_controls else 'show'} controls")
     
     y_offset = 10
