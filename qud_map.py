@@ -20,7 +20,7 @@ PARSANG_Y_MAX = 25
 ZONE_DIM = 3
 
 # --- Zoom & Pan Configuration ---
-ZOOM_SPEED = 0.5
+ZOOM_SPEED = 0.5  # <-- UPDATED
 MIN_ZOOM = 0.2
 MAX_ZOOM = 10.0
 
@@ -41,7 +41,7 @@ zones = {}
 current_location_str = "None"
 current_z_level = 10
 
-# --- Utility & Core Logic Functions (Unchanged from your last version) ---
+# --- Utility & Core Logic Functions (Unchanged) ---
 def trim(s: str) -> str: return s.strip()
 
 def hex_to_rgb(hex_color: str) -> tuple:
@@ -136,7 +136,7 @@ def add_locations_from_csv():
     except IOError as e:
         print(f"Error reading locations CSV file: {e}")
 
-# --- Pygame Drawing & Transformation Functions (Mostly Unchanged) ---
+# --- Pygame Drawing & Transformation Functions (Unchanged) ---
 def world_to_screen(world_x, world_y, zoom, camera_offset, map_area):
     screen_x = (world_x * zoom) - camera_offset[0] + map_area.left
     screen_y = (world_y * zoom) - camera_offset[1] + map_area.top
@@ -208,12 +208,10 @@ def draw_headers(screen, font, zoom, camera_offset, map_area):
             screen.blit(text, text.get_rect(center=(map_area.right + (SCREEN_WIDTH - map_area.right) / 2, screen_y)))
 
 # --- MODIFIED draw_hud function ---
-def draw_hud(screen, font, show_controls):
-    """Draws the HUD, conditionally showing the controls based on the show_controls flag."""
+def draw_hud(screen, font, show_controls, follow_mode):
     depth = current_z_level - 10
     depth_str = "Surface" if depth == 0 else f"{depth} strata deep" if depth > 0 else f"{abs(depth)} strata high"
 
-    # Build the list of text to display
     info_text = [
         f"Current: {current_location_str}",
         f"Depth: {depth_str} (Z={current_z_level})",
@@ -222,13 +220,12 @@ def draw_hud(screen, font, show_controls):
     # Conditionally add the controls section
     if show_controls:
         info_text.extend([
-            " ", # Adds a little space
-            "Controls:",
-            "  Mouse Wheel to Zoom",
-            "  Middle-Click + Drag to Pan",
+            " ", "Controls:", "  Mouse Wheel to Zoom", "  Middle-Click + Drag to Pan",
         ])
     
-    # Add the toggle hint at the end
+    # Add toggle hints
+    follow_status = "ON" if follow_mode else "OFF"
+    info_text.append(f"  Follow Mode: {follow_status} (F)")
     info_text.append(f"  Press 'H' to {'hide' if show_controls else 'show'} controls")
     
     y_offset = 10
@@ -239,6 +236,8 @@ def draw_hud(screen, font, show_controls):
 
 # --- Main Program Loop ---
 def main():
+    global current_location_str  # <-- THE FIX: Tell this function to use the global variable
+
     pygame.init()
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     pygame.display.set_caption("Caves of Qud - Live Parsang Map")
@@ -251,7 +250,8 @@ def main():
     camera_offset = [0, 0]
     is_panning = False
     pan_start_pos = (0, 0)
-    show_controls_hud = False  # <-- NEW: State for toggling controls
+    show_controls_hud = True
+    follow_mode = True
 
     print("Loading initial location data...")
     read_locations_from_cache_db()
@@ -270,10 +270,12 @@ def main():
                 print("Checking for updates in Player.log...")
                 read_player_log()
             
-            # --- NEW: Keyboard event for toggling help ---
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_h:
                     show_controls_hud = not show_controls_hud
+                if event.key == pygame.K_f:
+                    follow_mode = not follow_mode
+                    print(f"Follow mode {'enabled' if follow_mode else 'disabled'}.")
 
             if event.type == pygame.MOUSEWHEEL:
                 mouse_pos = pygame.mouse.get_pos()
@@ -290,18 +292,30 @@ def main():
             if event.type == pygame.MOUSEBUTTONUP and event.button == 2:
                 is_panning = False
             if event.type == pygame.MOUSEMOTION and is_panning:
+                if follow_mode:
+                    follow_mode = False
+                    print("Follow mode disabled due to manual panning.")
                 dx, dy = event.rel
                 camera_offset[0] -= dx
                 camera_offset[1] -= dy
+
+        if follow_mode and current_location_str != "None":
+            try:
+                px, py, zx, zy, _ = map(int, current_location_str.split('.'))
+                target_world_x = (px * ZONE_DIM + zx) * BASE_CELL_SIZE + (BASE_CELL_SIZE / 2)
+                target_world_y = (py * ZONE_DIM + zy) * BASE_CELL_SIZE + (BASE_CELL_SIZE / 2)
+                camera_offset[0] = (target_world_x * zoom_level) - (map_area.width / 2)
+                camera_offset[1] = (target_world_y * zoom_level) - (map_area.height / 2)
+            except (ValueError, IndexError):
+                print(f"Warning: Could not parse current_location_str: {current_location_str}")
+                current_location_str = "None"
 
         screen.fill(HEADER_BG_COLOR)
         screen.fill(GRID_BASE_COLOR, map_area)
         draw_map(screen, zoom_level, camera_offset, map_area, current_z_level)
         draw_grid_lines(screen, zoom_level, camera_offset, map_area)
         draw_headers(screen, header_font, zoom_level, camera_offset, map_area)
-        
-        # --- MODIFIED: Pass the toggle state to the HUD ---
-        draw_hud(screen, font, show_controls_hud)
+        draw_hud(screen, font, show_controls_hud, follow_mode)
         
         pygame.display.flip()
         clock.tick(60)
